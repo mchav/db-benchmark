@@ -3,26 +3,18 @@ set -e
 
 cd haskell
 
-# Get GHC version (Haskell compiler)
-GHC_VERSION=$(stack ghc -- --numeric-version 2>/dev/null || echo "unknown")
-
-# Get Frames version from stack
-FRAMES_VERSION=$(stack list-dependencies --depth 1 2>/dev/null | grep "^Frames " | awk '{print $2}' || echo "unknown")
-
-# If Frames version is unknown, try from package.yaml or stack.yaml
-if [ "$FRAMES_VERSION" = "unknown" ]; then
-    FRAMES_VERSION=$(stack exec -- ghc-pkg field Frames version 2>/dev/null | awk '{print $2}' || echo "0.7.0")
-fi
+# Get dataframe version from stack
+DF_VERSION=$(stack exec -- ghc-pkg field dataframe version 2>/dev/null | awk '{print $2}' || echo "0.3.3")
 
 # Write version to VERSION file
-echo "${FRAMES_VERSION}" > VERSION
+echo "${DF_VERSION}" > VERSION
 
-# Get git revision if available
-GIT_REV=$(cd $(stack path --local-install-root 2>/dev/null || echo ".") && git rev-parse --short HEAD 2>/dev/null || echo "")
+# Get git revision of dataframe if available
+GIT_REV=$(stack path --local-install-root 2>/dev/null && git -C $(stack path --local-install-root 2>/dev/null || echo ".") rev-parse --short HEAD 2>/dev/null || echo "")
 if [ -n "$GIT_REV" ]; then
     echo "$GIT_REV" > REVISION
 else
-    echo "GHC-${GHC_VERSION}" > REVISION
+    echo "dataframe-${DF_VERSION}" > REVISION
 fi
 
 cd ..
