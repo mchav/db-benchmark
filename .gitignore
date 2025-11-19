@@ -36,4 +36,4 @@ workdir/
 timeout-exit-codes.out
 */target
 *.lock
-.dist-newstyle
+dist-newstyle
