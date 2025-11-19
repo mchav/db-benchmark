@@ -16,8 +16,8 @@ fi
 
 # Install dependencies and build
 stack setup
-stack build --only-dependencies
-stack build
+stack build --only-dependencies --ghc-options "-O2"
+stack build --ghc-options "-O2"
 
 cd ..
 
