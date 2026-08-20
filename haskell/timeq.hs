@@ -22,6 +22,7 @@ import DataFrame.Internal.Expression (AggStrategy (..), Expr (..))
 import DataFrame.Schema (schemaType)
 import qualified DataFrame.Operations.Aggregation as D
 import qualified DataFrame.Operations.Core as D
+import DataFrame.Operations.Merge () -- Semigroup DataFrame (row concat)
 import qualified DataFrame.Operations.Subset as D
 import qualified DataFrame.Operations.Transformations as D
 import System.Environment (getEnv, lookupEnv)
@@ -48,9 +49,14 @@ chkSumDbl col df = case D.columnAsDoubleVector (F.col @Double (T.pack col)) df o
   Right vec -> VU.sum vec
   Left _ -> 0.0
 
-top2Sum :: Expr Double -> Expr Double
-top2Sum = Agg (CollectAgg "top2Sum" f)
-  where f v = Prelude.sum (take 2 (L.sortBy (flip compare) (V.toList v)))
+-- | Per-group second-largest value; NaN for a size-1 group (kernel-matching
+-- interpreter fallback; the benchmark data has no size-1 id6 groups).
+top2Snd :: Expr Double -> Expr Double
+top2Snd = Agg (CollectAgg "top2Snd" f)
+  where
+    f v = case L.sortBy (flip compare) (V.toList v) of
+      (_ : b : _) -> b
+      _ -> 0 / 0
 
 r2Expr :: Expr Double
 r2Expr =
@@ -61,9 +67,11 @@ r2Expr =
       den = (n * sxx - sx * sx) * (n * syy - sy * sy)
    in If (F.gt den (Lit 0)) ((num * num) / den) (Lit 0)
 
+-- Force the ENTIRE result frame (all columns, keys included) so lazily-built
+-- output columns are measured, matching what any real consumer pays.
 run :: DataFrame -> [Double] -> IO Double
 run df chks = do
-  _ <- evaluate (D.dimensions df)
+  _ <- evaluate (force df)
   evaluate (sum chks)
 
 main :: IO ()
@@ -104,6 +112,11 @@ main = do
   timeIt "Q5" $ let r = (D.groupBy [F.name id6] >>> D.aggregate ["v1_sum" .= F.sum v1, "v2_sum" .= F.sum v2, "v3_sum" .= F.sum v3]) df in run r [chkSumInt "v1_sum" r, chkSumInt "v2_sum" r, chkSumDbl "v3_sum" r]
   timeIt "Q6" $ let r = (D.groupBy [F.name id4, F.name id5] >>> D.aggregate ["v3_median" .= F.median v3, "v3_sd" .= F.stddev v3]) df in run r [chkSumDbl "v3_median" r, chkSumDbl "v3_sd" r]
   timeIt "Q7" $ let r = (D.groupBy [F.name id3] >>> D.aggregate ["diff" .= F.maximum v1 - F.minimum v2]) df in run r [chkSumInt "diff" r]
-  timeIt "Q8" $ let r = (D.groupBy [F.name id6] >>> D.aggregate ["largest2_v3" .= top2Sum v3]) df in run r [chkSumDbl "largest2_v3" r]
+  -- Q8 matches the polars answer shape: top_k(2) per group, exploded to two
+  -- rows per group (2e6 x 2). chk = sum of the exploded v3 column.
+  timeIt "Q8" $ let r = (D.groupBy [F.name id6] >>> D.aggregate ["v3" .= F.maximum v3, "v3b" .= top2Snd v3]) df
+                    ex = D.select ["id6", "v3"] r <> D.rename "v3b" "v3" (D.select ["id6", "v3b"] r)
+                 in run ex [chkSumDbl "v3" ex]
   timeIt "Q9" $ let r = (D.groupBy [F.name id2, F.name id4] >>> D.aggregate ["n" .= F.count v1, "sx" .= F.sum dv1, "sy" .= F.sum dv2, "sxy" .= F.sum (dv1*dv2), "sxx" .= F.sum (dv1*dv1), "syy" .= F.sum (dv2*dv2)] >>> D.derive "r2" r2Expr) df in run r [chkSumDbl "r2" r]
   timeIt "Q10" $ let r = (D.groupBy (map ((\i n -> i <> (T.pack . show) n) "id") [1..6]) >>> D.aggregate [F.sum v3 `F.as` "v3_sum"]) df in run r [chkSumDbl "v3_sum" r]
+  timeIt "Q10sc" $ let r = (D.groupBy (map ((\i n -> i <> (T.pack . show) n) "id") [1..6]) >>> D.aggregate ["v3" .= F.sum v3, "count" .= F.count v3]) df in run r [chkSumDbl "v3" r, chkSumInt "count" r]

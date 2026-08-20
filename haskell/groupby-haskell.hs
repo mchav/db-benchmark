@@ -25,6 +25,7 @@ import DataFrame.Internal.Expression (AggStrategy (..), Expr (..))
 import DataFrame.Schema (schemaType)
 import qualified DataFrame.Operations.Aggregation as D
 import qualified DataFrame.Operations.Core as D
+import DataFrame.Operations.Merge () -- Semigroup DataFrame (row concat)
 import qualified DataFrame.Operations.Subset as D
 import qualified DataFrame.Operations.Transformations as D
 import System.Environment (getEnv, lookupEnv)
@@ -175,15 +176,27 @@ runBenchmark srcFile dataName machineType = do
         (\res -> [chkSumInt "diff" res])
 
     -- Q8: Largest two v3 by id6.
-    -- Polars takes top_k(2) per group then explodes and sums; the sum of the
-    -- exploded values equals the sum of (max + 2nd-max) per group, which is
-    -- what 'top2Sum' computes per group. Checksum parity is preserved.
+    -- Matches the polars reference shape: group_by(id6).agg(v3.top_k(2)).explode(v3)
+    -- -> TWO rows per group (2e6 rows x 2 cols on the 1e8 data). The per-group
+    -- max and second-max aggregate in one pass ('F.maximum' + 'top2Snd', both
+    -- exact multiset selections); the exploded frame is the vertical concat of
+    -- the max rows and the second-max rows (all maxes first, then all second
+    -- maxes — same multiset of rows as the reference, different row order).
+    -- chk = sum of v3 = the old top2Sum checksum.
     runQuestion
         config
         df
         "largest two v3 by id6"
-        (D.groupBy [F.name id6] >>> D.aggregate ["largest2_v3" .= top2Sum v3])
-        (\res -> [chkSumDbl "largest2_v3" res])
+        ( \d ->
+            let r =
+                    ( D.groupBy [F.name id6]
+                        >>> D.aggregate ["v3" .= F.maximum v3, "v3b" .= top2Snd v3]
+                    )
+                        d
+             in D.select ["id6", "v3"] r
+                    <> D.rename "v3b" "v3" (D.select ["id6", "v3b"] r)
+        )
+        (\res -> [chkSumDbl "v3" res])
 
     -- Q9: Regression (r^2 of v1 vs v2) by id2, id4.
     -- corr(v1,v2)^2 from the per-group sums of v1, v2, v1*v2, v1^2, v2^2 and the
@@ -252,12 +265,18 @@ chkSumDbl col df =
         Right vec -> VU.sum vec
         Left _ -> 0.0
 
--- | Per-group sum of the two largest values (top_k(2) then sum, like polars Q8).
-top2Sum :: Expr Double -> Expr Double
-top2Sum = Agg (CollectAgg "top2Sum" f)
+{- | Per-group second-largest value (with 'F.maximum' this yields polars Q8's
+top_k(2) pair). The vectorized kernel path returns NaN for a group of size 1
+(the benchmark data has no size-1 id6 groups); this interpreter fallback
+mirrors that.
+-}
+top2Snd :: Expr Double -> Expr Double
+top2Snd = Agg (CollectAgg "top2Snd" f)
   where
     f :: V.Vector Double -> Double
-    f v = Prelude.sum (take 2 (L.sortBy (flip compare) (V.toList v)))
+    f v = case L.sortBy (flip compare) (V.toList v) of
+        (_ : b : _) -> b
+        _ -> 0 / 0
 
 {- | Squared Pearson correlation of v1,v2 from per-group moment sums (polars Q9).
 Degenerate groups (zero variance) contribute 0 rather than poisoning the sum

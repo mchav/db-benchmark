@@ -38,3 +38,8 @@ executable timeq
   main-is:             timeq.hs
   hs-source-dirs:      .
   build-depends:       deepseq
+
+executable microbench
+  import:              df-deps
+  main-is:             microbench.hs
+  hs-source-dirs:      .
