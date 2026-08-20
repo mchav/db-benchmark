@@ -5,6 +5,7 @@
 import BenchmarkCommon
 import Control.Arrow ((>>>))
 import Control.Monad (forM_)
+import Debug.Trace (traceMarkerIO)
 import Data.Functor ((<&>))
 import qualified Data.List as L
 import Data.Maybe (fromMaybe)
@@ -240,12 +241,14 @@ runQuestion ::
     IO ()
 runQuestion cfg inputDF qLabel transform chkFn = do
     forM_ [1, 2] $ \runNum -> do
+        traceMarkerIO (qLabel ++ " run" ++ show runNum ++ " START")
         (resultDF, calcTime) <- timeIt $ do
             let result = freshRun runNum transform inputDF
             print result
             return result
         memUsage <- getMemoryUsage
         let (outRows, outCols) = D.dimensions resultDF
+        traceMarkerIO (qLabel ++ " run" ++ show runNum ++ " END")
         (chkValues, chkTime) <- timeIt $ do
             let vals = chkFn resultDF
             print vals

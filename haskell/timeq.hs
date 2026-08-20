@@ -5,7 +5,6 @@
 
 import Control.Arrow ((>>>))
 import Control.Monad (forM_)
-import Control.DeepSeq (force)
 import Control.Exception (evaluate)
 import Data.Functor ((<&>))
 import qualified Data.List as L
@@ -68,10 +67,11 @@ r2Expr =
    in If (F.gt den (Lit 0)) ((num * num) / den) (Lit 0)
 
 -- Force the ENTIRE result frame (all columns, keys included) so lazily-built
--- output columns are measured, matching what any real consumer pays.
+-- output columns are measured, matching what the official harness's 'print
+-- result' pays (Show forces every column thunk; rendering is capped at 20 rows).
 run :: DataFrame -> [Double] -> IO Double
 run df chks = do
-  _ <- evaluate (force df)
+  _ <- evaluate (length (show df))
   evaluate (sum chks)
 
 main :: IO ()
