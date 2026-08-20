@@ -94,6 +94,9 @@ main = do
   timeIt "Q4grp" $ let gg = D.groupBy [F.name id4] df in (evaluate (VU.sum (rowToGroup gg)) >> pure 0)
   timeIt "Q4int" $ let r = D.aggregate ["v1_mean" .= F.mean v1, "v2_mean" .= F.mean v2] g4 in run r [chkSumDbl "v1_mean" r, chkSumDbl "v2_mean" r]
 
+  timeIt "Q3grp" $ let gg = D.groupBy [F.name id3] df in (evaluate (VU.sum (rowToGroup gg)) >> pure 0)
+  timeIt "Q5grp" $ let gg = D.groupBy [F.name id6] df in (evaluate (VU.sum (rowToGroup gg)) >> pure 0)
+  timeIt "Q9grp" $ let gg = D.groupBy [F.name id2, F.name id4] df in (evaluate (VU.sum (rowToGroup gg)) >> pure 0)
   timeIt "Q1" $ let r = (D.groupBy [F.name id1] >>> D.aggregate [F.sum v1 `F.as` "v1_sum"]) df in run r [chkSumInt "v1_sum" r]
   timeIt "Q2" $ let r = (D.groupBy [F.name id1, F.name id2] >>> D.aggregate ["v1_sum" .= F.sum v1]) df in run r [chkSumInt "v1_sum" r]
   timeIt "Q3" $ let r = (D.groupBy [F.name id3] >>> D.aggregate ["v1_sum" .= F.sum v1, "v3_mean" .= F.mean v3]) df in run r [chkSumInt "v1_sum" r, chkSumDbl "v3_mean" r]
