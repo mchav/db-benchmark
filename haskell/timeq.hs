@@ -24,15 +24,18 @@ import qualified DataFrame.Operations.Aggregation as D
 import qualified DataFrame.Operations.Core as D
 import qualified DataFrame.Operations.Subset as D
 import qualified DataFrame.Operations.Transformations as D
-import System.Environment (getEnv)
+import System.Environment (getEnv, lookupEnv)
 import Data.Time.Clock (getCurrentTime, diffUTCTime)
+import Debug.Trace (traceMarkerIO)
 
 timeIt :: String -> IO Double -> IO ()
 timeIt label act = do
   forM_ [1 :: Int, 2] $ \r -> do
+    traceMarkerIO (label ++ " run" ++ show r ++ " START")
     t0 <- getCurrentTime
     !chk <- act
     t1 <- getCurrentTime
+    traceMarkerIO (label ++ " run" ++ show r ++ " END")
     putStrLn $ label ++ " run" ++ show r ++ " " ++ show (realToFrac (diffUTCTime t1 t0) :: Double) ++ "s chk=" ++ show chk
 
 chkSumInt :: String -> DataFrame -> Double
@@ -99,6 +102,5 @@ main = do
   timeIt "Q6" $ let r = (D.groupBy [F.name id4, F.name id5] >>> D.aggregate ["v3_median" .= F.median v3, "v3_sd" .= F.stddev v3]) df in run r [chkSumDbl "v3_median" r, chkSumDbl "v3_sd" r]
   timeIt "Q7" $ let r = (D.groupBy [F.name id3] >>> D.aggregate ["diff" .= F.maximum v1 - F.minimum v2]) df in run r [chkSumInt "diff" r]
   timeIt "Q8" $ let r = (D.groupBy [F.name id6] >>> D.aggregate ["largest2_v3" .= top2Sum v3]) df in run r [chkSumDbl "largest2_v3" r]
-  let df9 = D.derive "v2v2" (dv2*dv2) (D.derive "v1v1" (dv1*dv1) (D.derive "v1v2" (dv1*dv2) df))
-  timeIt "Q9" $ let r = (D.groupBy [F.name id2, F.name id4] >>> D.aggregate ["n" .= F.count v1, "sx" .= F.sum dv1, "sy" .= F.sum dv2, "sxy" .= F.sum (F.col @Double "v1v2"), "sxx" .= F.sum (F.col @Double "v1v1"), "syy" .= F.sum (F.col @Double "v2v2")] >>> D.derive "r2" r2Expr) df9 in run r [chkSumDbl "r2" r]
+  timeIt "Q9" $ let r = (D.groupBy [F.name id2, F.name id4] >>> D.aggregate ["n" .= F.count v1, "sx" .= F.sum dv1, "sy" .= F.sum dv2, "sxy" .= F.sum (dv1*dv2), "sxx" .= F.sum (dv1*dv1), "syy" .= F.sum (dv2*dv2)] >>> D.derive "r2" r2Expr) df in run r [chkSumDbl "r2" r]
   timeIt "Q10" $ let r = (D.groupBy (map ((\i n -> i <> (T.pack . show) n) "id") [1..6]) >>> D.aggregate [F.sum v3 `F.as` "v3_sum"]) df in run r [chkSumDbl "v3_sum" r]

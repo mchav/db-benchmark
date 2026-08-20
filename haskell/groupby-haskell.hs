@@ -190,20 +190,16 @@ runBenchmark srcFile dataName machineType = do
     -- group count, then summed. Matches polars pl.corr(...)**2 then .sum().
     runQuestion
         config
-        ( D.derive
-            "v2v2"
-            (dv2 * dv2)
-            (D.derive "v1v1" (dv1 * dv1) (D.derive "v1v2" (dv1 * dv2) df))
-        )
+        df
         "regression v1 v2 by id2 id4"
         ( D.groupBy [F.name id2, F.name id4]
             >>> D.aggregate
                 [ "n" .= F.count v1
                 , "sx" .= F.sum dv1
                 , "sy" .= F.sum dv2
-                , "sxy" .= F.sum (F.col @Double "v1v2")
-                , "sxx" .= F.sum (F.col @Double "v1v1")
-                , "syy" .= F.sum (F.col @Double "v2v2")
+                , "sxy" .= F.sum (dv1 * dv2)
+                , "sxx" .= F.sum (dv1 * dv1)
+                , "syy" .= F.sum (dv2 * dv2)
                 ]
             >>> D.derive "r2" r2Expr
             >>> D.select [F.name id2, F.name id4, "r2"]

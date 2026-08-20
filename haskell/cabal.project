@@ -1,2 +1,7 @@
 packages: .
+          /home/ubuntu/dataframe/dataframe-core
+          /home/ubuntu/dataframe/dataframe-parsing
+          /home/ubuntu/dataframe/dataframe-operations
+          /home/ubuntu/dataframe/dataframe-csv
+          /home/ubuntu/dataframe/dataframe-fastcsv
 allow-newer: all
