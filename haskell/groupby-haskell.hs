@@ -176,14 +176,8 @@ runBenchmark srcFile dataName machineType = do
         (D.groupBy [F.name id3] >>> D.aggregate ["diff" .= F.maximum v1 - F.minimum v2])
         (\res -> [chkSumInt "diff" res])
 
-    -- Q8: Largest two v3 by id6.
-    -- Matches the polars reference shape: group_by(id6).agg(v3.top_k(2)).explode(v3)
-    -- -> TWO rows per group (2e6 rows x 2 cols on the 1e8 data). The per-group
-    -- max and second-max aggregate in one pass ('F.maximum' + 'top2Snd', both
-    -- exact multiset selections); the exploded frame is the vertical concat of
-    -- the max rows and the second-max rows (all maxes first, then all second
-    -- maxes — same multiset of rows as the reference, different row order).
-    -- chk = sum of v3 = the old top2Sum checksum.
+    -- Q8: largest two v3 by id6, exploded to two rows per group
+    -- (polars reference shape: group_by(id6).agg(v3.top_k(2)).explode(v3)).
     runQuestion
         config
         df

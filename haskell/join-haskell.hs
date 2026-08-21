@@ -19,13 +19,15 @@ import DataFrame.IO.CSV (
     defaultReadOptions,
  )
 import DataFrame.IO.CSV.Fast (fastReadCsvWithOpts)
-import DataFrame.Internal.DataFrame (DataFrame)
+import DataFrame.Internal.Column (forceColumn)
+import DataFrame.Internal.DataFrame (DataFrame, columnNames, getColumn)
 import DataFrame.Schema (SchemaType, schemaType)
 import qualified DataFrame.Operations.Core as D
 import qualified DataFrame.Operations.Join as DJ
 import Numeric (showEFloat)
 import System.Environment (getEnv, lookupEnv)
 import System.IO (BufferMode (..), hSetBuffering, stdout)
+import System.Mem (performGC)
 
 main :: IO ()
 main = do
@@ -148,9 +150,10 @@ runJoin ::
     IO ()
 runJoin cfg leftDF rightDF qLabel joinFn = do
     forM_ [1, 2] $ \runNum -> do
+        performGC
         (resultDF, calcTime) <- timeIt $ do
             let res = freshRun runNum (uncurry joinFn) (leftDF, rightDF)
-            _ <- evaluate res
+            forceAllColumns res
             return res
 
         memUsage <- getMemoryUsage
@@ -166,6 +169,12 @@ runJoin cfg leftDF rightDF qLabel joinFn = do
         writeLog cfg qLabel outRows outCols runNum calcTime memUsage chkValues chkTime
 
     putStrLn $ qLabel ++ " completed."
+
+forceAllColumns :: DataFrame -> IO ()
+forceAllColumns df = forM_ (columnNames df) $ \nm ->
+    case getColumn nm df of
+        Just c -> evaluate (forceColumn c) >> pure ()
+        Nothing -> pure ()
 
 {- | Sum a Double column, skipping nulls/NaN. A left join surfaces the
 right-side value column as @Maybe Double@; 'columnAsDoubleVector' coerces

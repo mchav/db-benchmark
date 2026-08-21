@@ -32,14 +32,3 @@ executable join-haskell
   main-is:             join-haskell.hs
   hs-source-dirs:      .
   other-modules:       BenchmarkCommon
-
-executable timeq
-  import:              df-deps
-  main-is:             timeq.hs
-  hs-source-dirs:      .
-  build-depends:       deepseq
-
-executable microbench
-  import:              df-deps
-  main-is:             microbench.hs
-  hs-source-dirs:      .
