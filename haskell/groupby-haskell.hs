@@ -5,13 +5,10 @@
 import BenchmarkCommon
 import Control.Arrow ((>>>))
 import Control.Monad (forM_)
-import Debug.Trace (traceMarkerIO)
 import Data.Functor ((<&>))
-import qualified Data.List as L
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Vector as V
 import qualified Data.Vector.Unboxed as VU
 import DataFrame.Functions ((.=))
 import qualified DataFrame.Functions as F
@@ -22,13 +19,14 @@ import DataFrame.IO.CSV (
  )
 import DataFrame.IO.CSV.Fast
 import DataFrame.Internal.DataFrame (DataFrame)
-import DataFrame.Internal.Expression (AggStrategy (..), Expr (..))
-import DataFrame.Schema (schemaType)
+import DataFrame.Internal.Expression (Expr (..))
 import qualified DataFrame.Operations.Aggregation as D
 import qualified DataFrame.Operations.Core as D
-import DataFrame.Operations.Merge () -- Semigroup DataFrame (row concat)
+-- Semigroup DataFrame (row concat)
+import DataFrame.Operations.Merge ()
 import qualified DataFrame.Operations.Subset as D
 import qualified DataFrame.Operations.Transformations as D
+import DataFrame.Schema (schemaType)
 import System.Environment (getEnv, lookupEnv)
 import System.IO (BufferMode (..), hPutStrLn, hSetBuffering, stderr, stdout)
 
@@ -113,7 +111,7 @@ runBenchmark srcFile dataName machineType = do
         config
         df
         "sum v1 by id1"
-        (D.groupBy [F.name id1] >>> D.aggregate [F.sum v1 `F.as` "v1_sum"])
+        (D.groupBy [F.name id1] >>> D.aggregate ["v1_sum" .= F.sum v1])
         (\res -> [chkSumInt "v1_sum" res])
 
     -- Q2: Sum v1 by id1:id2
@@ -178,14 +176,19 @@ runBenchmark srcFile dataName machineType = do
 
     -- Q8: largest two v3 by id6, exploded to two rows per group
     -- (polars reference shape: group_by(id6).agg(v3.top_k(2)).explode(v3)).
+    -- 'F.topK' returns the pair in descending order; the library has no explode,
+    -- so we take the two ends and stack the halves.
     runQuestion
         config
         df
         "largest two v3 by id6"
         ( \d ->
-            let r =
+            let top2 = F.col @[Double] "top2"
+                r =
                     ( D.groupBy [F.name id6]
-                        >>> D.aggregate ["v3" .= F.maximum v3, "v3b" .= top2Snd v3]
+                        >>> D.aggregate ["top2" .= F.topK 2 v3]
+                        >>> D.derive "v3" (F.fromMaybe nan (F.firstOrNothing top2))
+                        >>> D.derive "v3b" (F.fromMaybe nan (F.lastOrNothing top2))
                     )
                         d
              in D.select ["id6", "v3"] r
@@ -235,20 +238,24 @@ runQuestion ::
     IO ()
 runQuestion cfg inputDF qLabel transform chkFn = do
     forM_ [1, 2] $ \runNum -> do
-        traceMarkerIO (qLabel ++ " run" ++ show runNum ++ " START")
         (resultDF, calcTime) <- timeIt $ do
             let result = freshRun runNum transform inputDF
             print result
             return result
         memUsage <- getMemoryUsage
         let (outRows, outCols) = D.dimensions resultDF
-        traceMarkerIO (qLabel ++ " run" ++ show runNum ++ " END")
         (chkValues, chkTime) <- timeIt $ do
             let vals = chkFn resultDF
             print vals
             return vals
         writeLog cfg qLabel outRows outCols runNum calcTime memUsage chkValues chkTime
     putStrLn $ qLabel ++ " completed."
+
+{- | Stand-in for a group with fewer than two values. The benchmark data has no
+size-1 id6 groups, so this never reaches the checksum.
+-}
+nan :: Double
+nan = 0 / 0
 
 chkSumInt :: String -> DataFrame -> Double
 chkSumInt col df =
@@ -261,19 +268,6 @@ chkSumDbl col df =
     case D.columnAsDoubleVector (F.col @Double (T.pack col)) df of
         Right vec -> VU.sum vec
         Left _ -> 0.0
-
-{- | Per-group second-largest value (with 'F.maximum' this yields polars Q8's
-top_k(2) pair). The vectorized kernel path returns NaN for a group of size 1
-(the benchmark data has no size-1 id6 groups); this interpreter fallback
-mirrors that.
--}
-top2Snd :: Expr Double -> Expr Double
-top2Snd = Agg (CollectAgg "top2Snd" f)
-  where
-    f :: V.Vector Double -> Double
-    f v = case L.sortBy (flip compare) (V.toList v) of
-        (_ : b : _) -> b
-        _ -> 0 / 0
 
 {- | Squared Pearson correlation of v1,v2 from per-group moment sums (polars Q9).
 Degenerate groups (zero variance) contribute 0 rather than poisoning the sum

@@ -7,10 +7,10 @@ common df-deps
   build-depends:       base >= 4.7 && < 5
                      , bytestring >= 0.11 && < 0.13
                      , cassava >= 0.1 && < 1
-                     , dataframe-core ^>= 2.4
+                     , dataframe-core ^>= 2.5
                      , dataframe-parsing ^>= 2.2
                      , dataframe-csv ^>= 2.3
-                     , dataframe-operations ^>= 2.4
+                     , dataframe-operations ^>= 2.5
                      , dataframe-fastcsv ^>= 1.4.1
                      , text >= 2.1
                      , vector >= 0.12
