@@ -190,25 +190,6 @@ sumCol name df =
                 Right vec -> Prelude.sum (catMaybes (V.toList vec))
                 Left _ -> 0.0
 
-{- | Split the column pairs a join merged into one.
-
-When both sides of a join carry a column of the same name (here every id
-column except the key), the join combines the pair into a single merged
-column holding both values. Polars and the other solutions instead keep the
-two columns side by side, the right-hand one under a suffixed name, so their
-result is wider. Reporting our narrower shape as 'out_cols' makes the report
-reject the run, because it checks that every solution agrees on the width of
-each answer.
-
-This restores the expected shape: a merged column @name@ becomes @name@
-holding the left values and @name_right@ holding the right ones. Columns that
-were not merged are left alone.
-
-A merged column already stores both sides in their native representation, so
-this only rebinds existing columns under separate names. Nothing is copied
-and forcing the result touches exactly the same columns as before, which is
-why it belongs inside the timed region.
--}
 splitMergedColumns :: DataFrame -> DataFrame
 splitMergedColumns df0 = foldl' splitOne df0 (columnNames df0)
   where
